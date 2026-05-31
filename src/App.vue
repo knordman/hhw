@@ -1,7 +1,7 @@
 <script setup lang="ts">
-import DrawCanvas from './components/DrawCanvas.vue'
+import { RouterView } from 'vue-router'
 </script>
 
 <template>
-  <DrawCanvas />
+  <RouterView />
 </template>
