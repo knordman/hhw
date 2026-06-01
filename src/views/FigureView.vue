@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, reactive, ref, useTemplateRef } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, useTemplateRef, watch } from 'vue'
 import { useRoute, RouterLink } from 'vue-router'
 import { toPng } from 'html-to-image'
 import { findFigure } from '../figures'
@@ -146,6 +146,71 @@ function dressFigure() {
 }
 
 const sceneRef = useTemplateRef<HTMLElement>('sceneRef')
+const figureImgRef = useTemplateRef<HTMLImageElement>('figureImgRef')
+
+// Measure the rendered size of the figure image so the wrapper matches it
+// exactly. Without this, iOS Safari resolves max-height:100% on the wrapper
+// differently than the contained image, throwing off percent-based shirt
+// placement.
+const figureSize = reactive({ w: 0, h: 0 })
+
+function measureFigure() {
+  const img = figureImgRef.value
+  if (!img) return
+  const nw = img.naturalWidth
+  const nh = img.naturalHeight
+  if (!nw || !nh) return
+  const scene = sceneRef.value
+  if (!scene) return
+  const sceneStyle = getComputedStyle(scene)
+  const padX =
+    parseFloat(sceneStyle.paddingLeft) + parseFloat(sceneStyle.paddingRight)
+  const padY =
+    parseFloat(sceneStyle.paddingTop) + parseFloat(sceneStyle.paddingBottom)
+  const availW = scene.clientWidth - padX
+  const availH = scene.clientHeight - padY
+  const scale = Math.min(availW / nw, availH / nh, 1)
+  figureSize.w = Math.floor(nw * scale)
+  figureSize.h = Math.floor(nh * scale)
+}
+
+function onFigureLoad() {
+  measureFigure()
+}
+
+let resizeObserver: ResizeObserver | null = null
+
+onMounted(() => {
+  if (sceneRef.value && typeof ResizeObserver !== 'undefined') {
+    resizeObserver = new ResizeObserver(() => measureFigure())
+    resizeObserver.observe(sceneRef.value)
+  }
+  window.addEventListener('resize', measureFigure)
+  measureFigure()
+})
+
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect()
+  window.removeEventListener('resize', measureFigure)
+})
+
+watch(() => figure.value?.id, () => {
+  // Reset measurement until the new image loads.
+  figureSize.w = 0
+  figureSize.h = 0
+})
+
+const figureWrapStyle = computed(() => {
+  const base = shirtStyle.value as Record<string, string>
+  if (figureSize.w && figureSize.h) {
+    return {
+      ...base,
+      width: figureSize.w + 'px',
+      height: figureSize.h + 'px',
+    }
+  }
+  return base
+})
 const downloading = ref(false)
 
 async function downloadCanvas() {
@@ -195,13 +260,20 @@ async function downloadCanvas() {
       <div v-if="figure" ref="sceneRef" class="scene" :class="{ washing }">
         <div
           class="figure-wrap"
-          :style="shirtStyle"
+          :style="figureWrapStyle"
           @pointerdown="onScrubStart"
           @pointermove="onScrubMove"
           @pointerup="onScrubEnd"
           @pointercancel="onScrubEnd"
         >
-          <img class="figure" :src="figure.src" alt="" draggable="false" />
+          <img
+            ref="figureImgRef"
+            class="figure"
+            :src="figure.src"
+            alt=""
+            draggable="false"
+            @load="onFigureLoad"
+          />
           <Shirt v-if="dressing" class="shirt" :colors="shirtColors" />
           <span
             v-for="d in dirts"
@@ -379,8 +451,8 @@ async function downloadCanvas() {
 
 .figure {
   display: block;
-  max-width: 100%;
-  max-height: 100%;
+  width: 100%;
+  height: 100%;
   object-fit: contain;
   user-select: none;
   -webkit-user-drag: none;
