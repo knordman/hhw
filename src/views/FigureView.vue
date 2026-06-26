@@ -7,12 +7,28 @@ import Shirt, { type ShirtColors } from '../components/Shirt.vue'
 import brushSrc from '../../graphics/brush.svg'
 import wardrobeSrc from '../../graphics/wardrobe.png'
 import bathroomSrc from '../../graphics/bathroom.png'
+import livingroomSrc from '../../graphics/livingroom.png'
+import sofa1Src from '../../graphics/sofa1.png'
+import sofa2Src from '../../graphics/sofa2.png'
+import gamesSrc from '../../graphics/games.png'
+import booksSrc from '../../graphics/books.png'
+import chandelairSrc from '../../graphics/chandelair.png'
 
 const route = useRoute()
 const figure = computed(() => findFigure(route.params.id as string))
 
 const washing = ref(false)
 const dressing = ref(false)
+const livingroom = ref(false)
+
+const furnitureMenuOpen = ref(false)
+const furniture = reactive({
+  sofaBlue: false,
+  sofaPink: false,
+  chandelair: false,
+})
+// Exclusive choice between games and books (or none).
+const shelf = ref<'games' | 'books' | null>(null)
 
 const shirtColors = reactive<ShirtColors>({
   top: '#536c5d',
@@ -87,6 +103,7 @@ function washFigure() {
   washing.value = !washing.value
   if (washing.value) {
     dressing.value = false
+    livingroom.value = false
     spawnDirt()
   } else {
     brushVisible.value = false
@@ -148,10 +165,86 @@ function dressFigure() {
   dressing.value = !dressing.value
   if (dressing.value) {
     washing.value = false
+    livingroom.value = false
     brushVisible.value = false
     dirts.value = []
   }
 }
+
+function toggleLivingroom() {
+  livingroom.value = !livingroom.value
+  if (livingroom.value) {
+    washing.value = false
+    dressing.value = false
+    brushVisible.value = false
+    dirts.value = []
+  } else {
+    bgPos.x = 50
+    bgPos.y = 0
+    furnitureMenuOpen.value = false
+  }
+}
+
+// Background pan for the livingroom scene (in percent).
+const bgPos = reactive({ x: 50, y: 0 })
+const panning = ref(false)
+let panStartX = 0
+let panStartY = 0
+let panBgStartX = 0
+let panBgStartY = 0
+let panStageW = 0
+let panStageH = 0
+
+function onPanStart(e: PointerEvent) {
+  if (!livingroom.value) return
+  e.preventDefault()
+  panning.value = true
+  panStartX = e.clientX
+  panStartY = e.clientY
+  panBgStartX = bgPos.x
+  panBgStartY = bgPos.y
+  const rect = (e.currentTarget as HTMLElement).getBoundingClientRect()
+  panStageW = rect.width
+  panStageH = rect.height
+  ;(e.currentTarget as HTMLElement).setPointerCapture(e.pointerId)
+}
+
+function onPanMove(e: PointerEvent) {
+  if (!panning.value) return
+  // background-position percent works against (image - container) extent, so
+  // dividing by container size gives an approximate but stable pan ratio.
+  const dxPct = ((e.clientX - panStartX) / panStageW) * 100
+  const dyPct = ((e.clientY - panStartY) / panStageH) * 100
+  bgPos.x = Math.max(0, Math.min(100, panBgStartX - dxPct))
+  bgPos.y = Math.max(0, Math.min(100, panBgStartY - dyPct))
+}
+
+function onPanEnd(e: PointerEvent) {
+  if (!panning.value) return
+  panning.value = false
+  const target = e.currentTarget as HTMLElement
+  if (target.hasPointerCapture(e.pointerId)) {
+    target.releasePointerCapture(e.pointerId)
+  }
+}
+
+const stageStyle = computed(() => {
+  if (!livingroom.value) return undefined
+  // Order matters: later layers appear on top of earlier ones, but background
+  // syntax stacks the FIRST listed image on TOP. Put accessories first,
+  // sofas last so people-height items don't get hidden behind sofas.
+  const layers: string[] = []
+  if (furniture.chandelair) layers.push(`url("${chandelairSrc}")`)
+  if (shelf.value === 'games') layers.push(`url("${gamesSrc}")`)
+  if (shelf.value === 'books') layers.push(`url("${booksSrc}")`)
+  if (furniture.sofaBlue) layers.push(`url("${sofa1Src}")`)
+  if (furniture.sofaPink) layers.push(`url("${sofa2Src}")`)
+  return {
+    '--bg-x': bgPos.x + '%',
+    '--bg-y': bgPos.y + '%',
+    '--furniture-bg': layers.length ? layers.join(', ') : 'none',
+  }
+})
 
 const sceneRef = useTemplateRef<HTMLElement>('sceneRef')
 const figureImgRef = useTemplateRef<HTMLImageElement>('figureImgRef')
@@ -246,7 +339,7 @@ async function downloadCanvas() {
     <header class="toolbar">
       <RouterLink to="/" class="back">← Tillbaka</RouterLink>
       <button
-        v-if="figure"
+        v-if="figure && dressing"
         class="download"
         :disabled="downloading"
         @click="downloadCanvas"
@@ -263,12 +356,78 @@ async function downloadCanvas() {
         </svg>
         <span>Ladda ner</span>
       </button>
+      <div v-if="figure && livingroom" class="furniture-wrap">
+        <button
+          class="download"
+          :class="{ open: furnitureMenuOpen }"
+          @click="furnitureMenuOpen = !furnitureMenuOpen"
+        >
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path
+              d="M4 12v6h2v-2h12v2h2v-6a3 3 0 0 0-3-3h-2v-3a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v3H7a3 3 0 0 0-3 3z"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="1.8"
+              stroke-linejoin="round"
+            />
+          </svg>
+          <span>Inredning</span>
+        </button>
+        <div v-if="furnitureMenuOpen" class="furniture-menu">
+          <label class="furniture-option">
+            <input type="checkbox" v-model="furniture.sofaBlue" />
+            <span>Blå soffa</span>
+          </label>
+          <label class="furniture-option">
+            <input type="checkbox" v-model="furniture.sofaPink" />
+            <span>Rosa soffa</span>
+          </label>
+          <label class="furniture-option">
+            <input type="checkbox" v-model="furniture.chandelair" />
+            <span>Ljuskrona</span>
+          </label>
+          <div class="furniture-divider"></div>
+          <label class="furniture-option">
+            <input
+              type="radio"
+              name="shelf"
+              :checked="shelf === 'games'"
+              @click="shelf = shelf === 'games' ? null : 'games'"
+            />
+            <span>Spel</span>
+          </label>
+          <label class="furniture-option">
+            <input
+              type="radio"
+              name="shelf"
+              :checked="shelf === 'books'"
+              @click="shelf = shelf === 'books' ? null : 'books'"
+            />
+            <span>Böcker</span>
+          </label>
+        </div>
+      </div>
     </header>
     <div
       class="stage"
-      :class="{ 'stage-wardrobe': dressing, 'stage-bathroom': washing }"
+      :class="{
+        'stage-wardrobe': dressing,
+        'stage-bathroom': washing,
+        'stage-livingroom': livingroom,
+        panning: panning && livingroom,
+      }"
+      :style="stageStyle"
+      @pointerdown="onPanStart"
+      @pointermove="onPanMove"
+      @pointerup="onPanEnd"
+      @pointercancel="onPanEnd"
     >
-      <div v-if="figure" ref="sceneRef" class="scene" :class="{ washing }">
+      <div
+        v-if="figure"
+        ref="sceneRef"
+        class="scene"
+        :class="{ washing, 'hide-figure': livingroom }"
+      >
         <div
           class="figure-wrap"
           :style="figureWrapStyle"
@@ -354,7 +513,7 @@ async function downloadCanvas() {
             stroke-linecap="round"
           />
         </svg>
-        <span>Tvätta figur</span>
+        <span>Badrum</span>
       </button>
       <button
         class="action"
@@ -370,7 +529,23 @@ async function downloadCanvas() {
             stroke-linejoin="round"
           />
         </svg>
-        <span>Klä på figur</span>
+        <span>Garderob</span>
+      </button>
+      <button
+        class="action"
+        :class="{ active: livingroom }"
+        @click="toggleLivingroom"
+      >
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path
+            d="M4 11 12 4l8 7v8a1 1 0 0 1-1 1h-4v-6h-6v6H5a1 1 0 0 1-1-1z"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linejoin="round"
+          />
+        </svg>
+        <span>Vardagsrum</span>
       </button>
     </footer>
   </div>
@@ -456,6 +631,64 @@ async function downloadCanvas() {
   background-size: cover;
   background-position: top center;
   background-repeat: no-repeat;
+}
+
+.stage-livingroom {
+  background-image: var(--furniture-bg, none),
+    v-bind('`url("${livingroomSrc}")`');
+  background-size: cover;
+  background-repeat: no-repeat;
+  background-position: var(--bg-x, 50%) var(--bg-y, 0%);
+  cursor: grab;
+  touch-action: none;
+}
+
+.stage-livingroom.panning {
+  cursor: grabbing;
+}
+
+.scene.hide-figure {
+  visibility: hidden;
+}
+
+
+.furniture-wrap {
+  position: relative;
+  margin-left: auto;
+}
+
+.furniture-wrap .download {
+  margin-left: 0;
+}
+
+.furniture-menu {
+  position: absolute;
+  top: calc(100% + 0.5rem);
+  right: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0.75rem 1rem;
+  background: #fff;
+  border: 1px solid #d8d8d8;
+  border-radius: 8px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.1);
+  white-space: nowrap;
+  z-index: 5;
+}
+
+.furniture-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.furniture-divider {
+  height: 1px;
+  background: #e0e0e0;
+  margin: 0.25rem -0.5rem;
 }
 
 .scene {
