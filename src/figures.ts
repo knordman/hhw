@@ -9,6 +9,8 @@ export type Figure = {
   src: string
 }
 
+const NON_FIGURE_IDS = new Set(['bathroom', 'wardrobe'])
+
 export const figures: Figure[] = Object.entries(modules)
   .map(([path, mod]) => {
     const id = path.split('/').pop()!.replace(/\.png$/, '')
@@ -18,6 +20,7 @@ export const figures: Figure[] = Object.entries(modules)
       src: mod.default,
     }
   })
+  .filter((f) => !NON_FIGURE_IDS.has(f.id))
   .sort((a, b) => a.id.localeCompare(b.id))
 
 export function findFigure(id: string): Figure | undefined {
