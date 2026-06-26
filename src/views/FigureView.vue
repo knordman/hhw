@@ -5,6 +5,8 @@ import { toPng } from 'html-to-image'
 import { findFigure } from '../figures'
 import Shirt, { type ShirtColors } from '../components/Shirt.vue'
 import brushSrc from '../../graphics/brush.svg'
+import wardrobeSrc from '../../graphics/wardrobe.png'
+import bathroomSrc from '../../graphics/bathroom.png'
 
 const route = useRoute()
 const figure = computed(() => findFigure(route.params.id as string))
@@ -84,6 +86,7 @@ function spawnDirt() {
 function washFigure() {
   washing.value = !washing.value
   if (washing.value) {
+    dressing.value = false
     spawnDirt()
   } else {
     brushVisible.value = false
@@ -143,6 +146,11 @@ function onScrubEnd(e: PointerEvent) {
 
 function dressFigure() {
   dressing.value = !dressing.value
+  if (dressing.value) {
+    washing.value = false
+    brushVisible.value = false
+    dirts.value = []
+  }
 }
 
 const sceneRef = useTemplateRef<HTMLElement>('sceneRef')
@@ -256,7 +264,10 @@ async function downloadCanvas() {
         <span>Ladda ner</span>
       </button>
     </header>
-    <div class="stage">
+    <div
+      class="stage"
+      :class="{ 'stage-wardrobe': dressing, 'stage-bathroom': washing }"
+    >
       <div v-if="figure" ref="sceneRef" class="scene" :class="{ washing }">
         <div
           class="figure-wrap"
@@ -430,6 +441,21 @@ async function downloadCanvas() {
   padding: 2rem;
   background: #fafafa;
   overflow: hidden;
+  transition: background-image 0.2s ease;
+}
+
+.stage-wardrobe {
+  background-image: v-bind('`url("${wardrobeSrc}")`');
+  background-size: cover;
+  background-position: top center;
+  background-repeat: no-repeat;
+}
+
+.stage-bathroom {
+  background-image: v-bind('`url("${bathroomSrc}")`');
+  background-size: cover;
+  background-position: top center;
+  background-repeat: no-repeat;
 }
 
 .scene {
